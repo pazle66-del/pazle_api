@@ -17,7 +17,7 @@ if password == VALID_PASSWORD:
         st.rerun()
 
     TOKEN = os.environ.get("FINAM_TOKEN")
-    CLIENT_ID = os.environ.get("FINAM_CLIENT_ID")  # Торговый код счета (например, 123456R...)
+    CLIENT_ID = os.environ.get("FINAM_CLIENT_ID")
 
     if not TOKEN or not CLIENT_ID:
         st.error("Ошибка: FINAM_TOKEN или FINAM_CLIENT_ID не найдены в Secrets.")
@@ -26,7 +26,7 @@ if password == VALID_PASSWORD:
             url = f"https://trade-api.finam.ru/api/v1/portfolio?clientId={CLIENT_ID}&includePositions=true&includeMaxBuySell=true"
             headers = {
                 "X-Api-Key": TOKEN,
-                "Content-Type": "application/json"
+                "accept": "application/json"
             }
             
             response = requests.get(url, headers=headers)
@@ -39,7 +39,7 @@ if password == VALID_PASSWORD:
                 
                 for pos in positions:
                     positions_data.append({
-                        "Инструмент (Security)": pos.get("securityCode", "—"),
+                        "Инструмент": pos.get("securityCode", "—"),
                         "Рынок": pos.get("market", "—"),
                         "Количество": pos.get("balance", 0),
                         "Текущая цена": pos.get("currentPrice", 0),
@@ -47,7 +47,7 @@ if password == VALID_PASSWORD:
                         "P&L (Прибыль/Убыток)": pos.get("unrealizedProfit", 0)
                     })
 
-                # Показываем балансовые показатели (ГО, Маржа и т.д.)
+                # Показываем балансовые показатели
                 currencies = data.get("currencies", [])
                 if currencies:
                     st.subheader("💰 Баланс и Маржа")
@@ -60,10 +60,10 @@ if password == VALID_PASSWORD:
                 else:
                     st.info("Открытые позиции отсутствуют или портфель пуст.")
             else:
-                st.error(f"Ошибка API Финам: Статус {response.status_code} — {response.text}")
+                st.error(f"Ошибка сервера Финам (Код {response.status_code}): {response.text}")
 
         except Exception as e:
-            st.error(f"Произошла ошибка при выполнении запроса: {e}")
+            st.error(f"Произошла ошибка при обработке данных: {e}")
 
 elif password != "":
     st.error("Неверный пароль")
