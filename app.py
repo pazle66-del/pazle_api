@@ -1,7 +1,7 @@
 import os
+import requests
 import pandas as pd
 import streamlit as st
-from finam_trade_api.client import Client
 
 st.set_page_config(page_title="Инвестиционный Портфель (Финам)", layout="wide")
 st.title("📊 Мониторинг портфеля Финам в реальном времени")
@@ -20,42 +20,50 @@ if password == VALID_PASSWORD:
     CLIENT_ID = os.environ.get("FINAM_CLIENT_ID")  # Торговый код счета (например, 123456R...)
 
     if not TOKEN or not CLIENT_ID:
-        st.error("Ошибка: FINAM_TOKEN или FINAM_CLIENT_ID не найдены в настройках Secrets.")
+        st.error("Ошибка: FINAM_TOKEN или FINAM_CLIENT_ID не найдены в Secrets.")
     else:
         try:
-            client = Client(TOKEN)
-            portfolio = client.get_portfolio(CLIENT_ID)
-
-            positions_data = []
-
-            # Перебираем позиции в портфеле (включая срочный рынок / фьючерсы)
-            if hasattr(portfolio, 'positions') and portfolio.positions:
-                for pos in portfolio.positions:
-                    security_code = getattr(pos, 'security_code', '—')
-                    market = getattr(pos, 'market', '—')
-                    balance = getattr(pos, 'balance', 0)
-                    price = getattr(pos, 'current_price', 0)
-                    average_price = getattr(pos, 'average_price', 0)
-                    unrealized_profit = getattr(pos, 'unrealized_profit', 0)
-
+            url = f"https://trade-api.finam.ru/api/v1/portfolio?clientId={CLIENT_ID}&includePositions=true&includeMaxBuySell=true"
+            headers = {
+                "X-Api-Key": TOKEN,
+                "Content-Type": "application/json"
+            }
+            
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                positions = data.get("positions", [])
+                
+                positions_data = []
+                
+                for pos in positions:
                     positions_data.append({
-                        "Инструмент": security_code,
-                        "Рынок": market,
-                        "Количество": balance,
-                        "Текущая цена": f"{price:.2f}" if isinstance(price, (int, float)) else price,
-                        "Средняя цена": f"{average_price:.2f}" if isinstance(average_price, (int, float)) else average_price,
-                        "P&L (Прибыль/Убыток)": f"{unrealized_profit:.2f}" if isinstance(unrealized_profit, (int, float)) else unrealized_profit
+                        "Инструмент (Security)": pos.get("securityCode", "—"),
+                        "Рынок": pos.get("market", "—"),
+                        "Количество": pos.get("balance", 0),
+                        "Текущая цена": pos.get("currentPrice", 0),
+                        "Средняя цена": pos.get("averagePrice", 0),
+                        "P&L (Прибыль/Убыток)": pos.get("unrealizedProfit", 0)
                     })
 
-            if positions_data:
-                df = pd.DataFrame(positions_data)
-                st.subheader("Открытые позиции (включая Фьючерсы)")
-                st.dataframe(df, use_container_width=True)
+                # Показываем балансовые показатели (ГО, Маржа и т.д.)
+                currencies = data.get("currencies", [])
+                if currencies:
+                    st.subheader("💰 Баланс и Маржа")
+                    st.json(currencies)
+
+                if positions_data:
+                    df = pd.DataFrame(positions_data)
+                    st.subheader("📈 Открытые позиции (включая Фьючерсы)")
+                    st.dataframe(df, use_container_width=True)
+                else:
+                    st.info("Открытые позиции отсутствуют или портфель пуст.")
             else:
-                st.info("Портфель пуст или активные позиции отсутствуют.")
+                st.error(f"Ошибка API Финам: Статус {response.status_code} — {response.text}")
 
         except Exception as e:
-            st.error(f"Ошибка при получении данных от Финам Trade API: {e}")
+            st.error(f"Произошла ошибка при выполнении запроса: {e}")
 
 elif password != "":
     st.error("Неверный пароль")
