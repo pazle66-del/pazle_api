@@ -1,3 +1,4 @@
 streamlit
 pandas
-tinkoff-investments
+finam-trade-api
+requests
