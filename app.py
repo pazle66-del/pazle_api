@@ -21,57 +21,61 @@ if password == VALID_PASSWORD:
     if not TOKEN:
         st.error("Ошибка: FINAM_TOKEN не найден в Secrets.")
     else:
-        # Подготовка заголовков
+        # Убираем лишние пробелы из токена и ID
+        token_clean = TOKEN.strip()
+        client_clean = CLIENT_ID.strip() if CLIENT_ID else ""
+
+        # Для Trade API Финам токен передаётся как через X-Api-Key, так и через Authorization
         headers = {
-            "X-Api-Key": TOKEN.strip(),
-            "accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            "X-Api-Key": token_clean,
+            "Authorization": f"Bearer {token_clean}",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0"
         }
 
-        # 1. Если CLIENT_ID не задан, сначала выводим список счетов
-        if not CLIENT_ID:
-            st.warning("Укажите FINAM_CLIENT_ID в Secrets. Получаем доступные счета...")
-            res = requests.get("https://trade-api.finam.ru/api/v1/user", headers=headers)
-            if res.status_code == 200:
-                st.json(res.json())
-            else:
-                st.error(f"Ошибка получения профиля (Код {res.status_code}): {res.text}")
-        else:
-            # 2. Получение портфеля
-            url = f"https://trade-api.finam.ru/api/v1/portfolio?clientId={CLIENT_ID.strip()}&includePositions=true&includeMaxBuySell=true"
-            res = requests.get(url, headers=headers)
+        # Выполняем запрос к v1/portfolio
+        url = f"https://trade-api.finam.ru/api/v1/portfolio"
+        params = {
+            "clientId": client_clean,
+            "includePositions": "true",
+            "includeMaxBuySell": "true"
+        }
+
+        try:
+            res = requests.get(url, headers=headers, params=params)
 
             if res.status_code == 200:
-                try:
-                    data = res.json()
-                    positions = data.get("positions", [])
-                    
-                    positions_data = []
-                    for pos in positions:
-                        positions_data.append({
-                            "Инструмент": pos.get("securityCode", "—"),
-                            "Рынок": pos.get("market", "—"),
-                            "Количество": pos.get("balance", 0),
-                            "Текущая цена": pos.get("currentPrice", 0),
-                            "Средняя цена": pos.get("averagePrice", 0),
-                            "P&L (Прибыль/Убыток)": pos.get("unrealizedProfit", 0)
-                        })
+                data = res.json()
+                positions = data.get("positions", [])
+                
+                positions_data = []
+                for pos in positions:
+                    positions_data.append({
+                        "Инструмент": pos.get("securityCode", "—"),
+                        "Рынок": pos.get("market", "—"),
+                        "Количество": pos.get("balance", 0),
+                        "Текущая цена": pos.get("currentPrice", 0),
+                        "Средняя цена": pos.get("averagePrice", 0),
+                        "P&L (Прибыль/Убыток)": pos.get("unrealizedProfit", 0)
+                    })
 
-                    currencies = data.get("currencies", [])
-                    if currencies:
-                        st.subheader("💰 Баланс и Маржа")
-                        st.json(currencies)
+                currencies = data.get("currencies", [])
+                if currencies:
+                    st.subheader("💰 Баланс / Маржа")
+                    st.json(currencies)
 
-                    if positions_data:
-                        df = pd.DataFrame(positions_data)
-                        st.subheader("📈 Открытые позиции (включая Фьючерсы)")
-                        st.dataframe(df, use_container_width=True)
-                    else:
-                        st.info("Открытые позиции отсутствуют или портфель пуст.")
-                except Exception as json_err:
-                    st.error(f"Ошибка разбора ответа: {json_err}. Ответ сервера: {res.text}")
+                if positions_data:
+                    df = pd.DataFrame(positions_data)
+                    st.subheader("📈 Открытые позиции (включая Фьючерсы)")
+                    st.dataframe(df, use_container_width=True)
+                else:
+                    st.info("Открытые позиции отсутствуют или портфель пуст.")
             else:
-                st.error(f"Ошибка сервера Финам (Код {res.status_code}): {res.text}")
+                st.error(f"Сервер Финам вернул статус {res.status_code}.")
+                st.code(res.text[:500], language="text")
+
+        except Exception as e:
+            st.error(f"Ошибка запроса: {e}")
 
 elif password != "":
     st.error("Неверный пароль")
